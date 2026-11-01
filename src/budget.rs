@@ -55,7 +55,7 @@ pub fn threads(asked: Option<NonZeroUsize>) -> std::io::Result<usize> {
 /// machine's own load -- 2.5 to 13 -- 1.033 (`p = 0.068`), eight concurrent
 /// callers getting 1.17 times the throughput. Rankings, query and passage
 /// embeddings and `accurate` scores were bit-identical. The rule, written
-/// before the run, is in PaminMemory's `docs/adr/0001-tech-selection.md`.
+/// before the run, is in pamin-memory's `docs/adr/0001-tech-selection.md`.
 pub fn options(threads: usize, target: impl Into<Target>) -> Result<SessionBuilder> {
     let target = target.into();
     let providers = match &target {

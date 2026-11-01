@@ -1,6 +1,6 @@
 # pamin-runtime
 
-Compute for Pamin modules that run models locally, written and measured once. Used by [PaminMemory](https://github.com/pamin-labs/pamin-memory).
+Compute for Pamin modules that run models locally, written and measured once. Used by [pamin-memory](https://github.com/pamin-labs/pamin-memory).
 
 | Module | Holds |
 | --- | --- |
@@ -27,7 +27,7 @@ for (device, target) in device::accelerators(&[])? {
 // the CPU and keep the fastest that scores the CPU's reference outputs.
 ```
 
-Status: 0.1, extracted from PaminMemory's `pamin-index`. Every kernel and device path is tested in CI on its own hardware: x86-64 Linux, Linux aarch64, Apple silicon and Windows.
+Status: 0.1, extracted from pamin-memory's `pamin-index`. Every kernel and device path is tested in CI on its own hardware: x86-64 Linux, Linux aarch64, Apple silicon and Windows.
 
 Releasing: bump `version` in `Cargo.toml` in a pull request and merge it, then run the `Release` workflow on `main` (`gh workflow run release.yml`). It publishes that version to crates.io through trusted publishing and tags it `v<version>`.
 

@@ -1,6 +1,6 @@
 # Repository Instructions
 
-This repository holds `pamin-runtime`, the open-source compute crate shared by Pamin modules that run models locally: instruction-set kernel dispatch, inference devices over ONNX Runtime, per-call thread budgets and the prepared-model cache. It is published to crates.io and used by PaminMemory and other modules.
+This repository holds `pamin-runtime`, the open-source compute crate shared by Pamin modules that run models locally: instruction-set kernel dispatch, inference devices over ONNX Runtime, per-call thread budgets and the prepared-model cache. It is published to crates.io and used by pamin-memory and other modules.
 
 ## Source of truth
 
