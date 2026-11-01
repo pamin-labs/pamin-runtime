@@ -8,6 +8,8 @@
 //! - [`activity`]: what model loads in this process fetched and prepared.
 //! - [`resident`]: handing a model's mapped weights back to the page cache
 //!   while it is idle.
+//! - [`session`]: sessions over a model's file, and the Core ML compiled
+//!   cache for static shapes.
 //! - [`prepared`]: what keys a prepared, memory-mapped copy of a model to the
 //!   runtime and CPU that wrote it.
 //!
@@ -18,8 +20,10 @@ pub mod budget;
 pub mod device;
 mod error;
 pub mod kernels;
+mod onnx;
 pub mod prepared;
 pub mod resident;
+pub mod session;
 #[cfg(target_os = "windows")]
 mod winml;
 

@@ -1,10 +1,4 @@
-//! What keys a prepared copy of a model to the machine that wrote it.
-//!
-//! A prepared copy is the model's graph written back out by ONNX Runtime after
-//! optimization, with every initializer -- the packed ones included -- in an
-//! external data file that a session maps rather than copies onto the heap.
-//! Writing, finding, holding and collecting copies is the caller's; this
-//! module owns what decides whether a copy written here is valid there.
+//! What keys a prepared copy to the machine that wrote it.
 //!
 //! A graph optimized with layout transformations is specific to the
 //! instruction set it was optimized on, and ONNX Runtime documents that it
