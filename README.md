@@ -29,4 +29,6 @@ for (device, target) in device::accelerators(&[])? {
 
 Status: 0.1, extracted from PaminMemory's `pamin-index`. Every kernel and device path is tested in CI on its own hardware: x86-64 Linux, Linux aarch64, Apple silicon and Windows.
 
+Releasing: bump `version` in `Cargo.toml` in a pull request, merge it, then push the tag `v<version>` on `main`; the `Release` workflow publishes it to crates.io through trusted publishing.
+
 Licensed under Apache-2.0.
