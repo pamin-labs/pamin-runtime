@@ -1,0 +1,78 @@
+[package]
+name = "pamin-runtime"
+description = "Compute for Pamin modules that run models locally: instruction-set kernels, ONNX Runtime devices, thread budgets and prepared-model keys."
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+license = "Apache-2.0"
+repository = "https://github.com/pamin-labs/pamin-runtime"
+readme = "README.md"
+keywords = ["onnx", "inference", "simd"]
+categories = ["science", "hardware-support"]
+exclude = ["/.agents", "/.claude", "/.github", "/.pamin-labs-dev.toml", "/AGENTS.md", "/CLAUDE.md"]
+
+[dependencies]
+# Widens fp16 codes with the CPU's own conversion instruction (F16C on x86-64,
+# fp16 on aarch64), detected at run time.
+half = "=2.7.1"
+# A measured plan on disk, and model paths and provider counts in log lines.
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+# Content digests: a prepared copy's source, and the Windows ML catalog.
+sha2 = "=0.10.9"
+thiserror = "=2.0.20"
+# Names a plan file's writer, and tells an abandoned write from a live one.
+uuid = { version = "=1.26.0", features = ["v7"] }
+tracing = "=0.1.44"
+# The inference runtime. Pinned exactly because it is a release candidate.
+# `std` is what loading a session from a file needs; `download-binaries`
+# fetches the prebuilt ONNX Runtime at build time, over the platform's native
+# TLS; `api-24` is the provider-assignment and device-discovery API.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = [
+    "std",
+    "download-binaries",
+    "tls-native",
+    "api-24",
+] }
+
+# A GPU, when the machine has one, with no build flag: each platform's ONNX
+# Runtime build carries the accelerator that platform has, and it is tried at
+# load and dropped for the CPU when it will not register. See
+# `device::accelerators`.
+#
+# On Linux that is CUDA, whose provider library (79 MB) is copied beside the
+# binary; using it needs the NVIDIA driver, CUDA 13 and cuDNN 9, which are the
+# user's and are not shipped. On Apple silicon it is Core ML, which is linked
+# into the binary from the system framework and needs no file beside it. On
+# Windows it is DirectML: the runtime links `DirectML.dll` (18.5 MB), which is
+# copied beside the binary because the copy Windows ships in System32 can be
+# older than the runtime needs -- with only that one the program still starts
+# and models run on the CPU. Elsewhere -- Linux on ARM, Intel Macs -- there is
+# no prebuilt runtime with an accelerator and the CPU is all there is.
+[target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["cuda", "copy-dylibs"] }
+
+# `madvise`, to hand an idle model's mapped weights back to the page cache.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "=0.2.189"
+
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["coreml"] }
+
+# sha2 0.10 enables its ARM SHA instructions only with this feature. Its
+# backend checks CPU support and retains the software fallback. Keep the
+# assembly build off MSVC; x86 already detects SHA instructions by default.
+[target.'cfg(all(unix, target_arch = "aarch64"))'.dependencies]
+sha2 = { version = "=0.10.9", features = ["asm"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["directml", "copy-dylibs"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+# Captures the log lines a session reports, in its tests.
+tracing-subscriber = "=0.3.23"
+
+[profile.dev]
+debug = "line-tables-only"
