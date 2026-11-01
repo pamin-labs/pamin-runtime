@@ -1,0 +1,58 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: clippy and test on ${{ matrix.os }}
+    # Every kernel and device path on its own hardware: AVX2/FMA and CUDA's
+    # startup guards on x86-64 Linux, NEON on Linux aarch64, Accelerate and
+    # NEON on Apple silicon, DirectML and the Windows ML catalog on Windows.
+    # Hosted runners have no GPU or NPU, so the accelerators are checked for
+    # how they fail to register, not for speed.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      # No toolchain action: rustup installs what rust-toolchain.toml names on
+      # the first cargo invocation, so the pin stays in one file.
+      - name: Cache dependency builds
+        uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy --locked --all-targets
+      - name: Test
+        run: cargo test --locked
+
+  format:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Format
+        run: cargo fmt --all --check
+
+  deny:
+    name: cargo deny
+    # Its own job: it reads the crate graph's metadata and needs no build.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check licences, advisories, bans and sources
+        uses: EmbarkStudios/cargo-deny-action@v2
