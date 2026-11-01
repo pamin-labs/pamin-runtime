@@ -1,30 +1,51 @@
 name: Release
 
-# Publishes to crates.io when a version tag is pushed, through crates.io
-# trusted publishing: the job's OIDC token is exchanged for a short-lived
-# publish token, so no crates.io token is stored in the repository.
+# Publishes the version in Cargo.toml to crates.io when run by hand
+# (`gh workflow run release.yml`, or "Run workflow" in the Actions tab), then
+# tags the commit it published as v<version>. Publishing goes through
+# crates.io trusted publishing: the job's OIDC token is exchanged for a
+# short-lived publish token, so no crates.io token is stored anywhere.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: publish to crates.io
+    # Only what has merged is released.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # Pushing the release tag.
+      contents: write
       # The OIDC token trusted publishing exchanges.
       id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Check the tag names the manifest's version
+        with:
+          fetch-depth: 0
+      - name: Read the version and refuse one already released
+        id: version
         run: |
           version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
-          test "${GITHUB_REF_NAME}" = "v${version}" || { echo "tag ${GITHUB_REF_NAME} is not v${version}"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            echo "v${version} is already tagged; bump the version in Cargo.toml first"
+            exit 1
+          fi
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'pamin-runtime release' \
+            "https://crates.io/api/v1/crates/pamin-runtime/${version}")"
+          if [ "${status}" = 200 ]; then
+            echo "${version} is already on crates.io; bump the version in Cargo.toml first"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
       - name: Exchange the OIDC token for a publish token
         id: auth
         uses: rust-lang/crates-io-auth-action@v1
@@ -32,3 +53,7 @@ jobs:
         run: cargo publish --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Tag the release
+        run: |
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
