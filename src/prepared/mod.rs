@@ -25,7 +25,7 @@
 //! what is live once the allocator has returned what it freed, the copy takes
 //! the `accurate` reranker from 822 MB anonymous to 271, BGE-M3 from 824 to
 //! 272, and the `fast` reranker from 385 to 268, with every score and vector
-//! bit-identical. PaminMemory's `tests/prepared.rs` is what measures that and fails if it
+//! bit-identical. pamin-memory's `tests/prepared.rs` is what measures that and fails if it
 //! stops being true.
 //!
 //! What it costs is disk and one slow first load. The copy is written once per
@@ -150,7 +150,7 @@ pub struct Settings {
 }
 
 impl Default for Settings {
-    /// Everything on, as PaminMemory ships it.
+    /// Everything on, as pamin-memory ships it.
     fn default() -> Self {
         Self {
             prepared: true,
@@ -255,7 +255,7 @@ const RECORD_PARTIAL_FOR: Duration = Duration::from_secs(60 * 60);
 static HELD: Mutex<BTreeMap<PathBuf, File>> = Mutex::new(BTreeMap::new());
 
 /// A model file as [`load_path`] asks for it: on disk, from the hub, or
-/// removed once a copy has replaced it. PaminMemory's `hub::File` in the product; a
+/// removed once a copy has replaced it. pamin-memory's `hub::File` in the product; a
 /// stand-in in the tests, which cannot reach a hub.
 pub trait Download {
     /// `repository/file`, which names the file's record and its log lines.

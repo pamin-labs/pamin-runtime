@@ -544,7 +544,7 @@ fn retry_model_with_clock<T: RuntimeModel, R, E: Failure>(
                 let mut reloaded = reload();
                 // A model first loaded before its revision's ref existed was
                 // planned under a namespace of that load's own (see
-                // PaminMemory's `hub::Repository::identity`), and the reload, opening it at
+                // pamin-memory's `hub::Repository::identity`), and the reload, opening it at
                 // the commit the ref now names, plans under the commit's: a
                 // namespace the quarantine above is not in. Carry the failed
                 // targets there, and plan once more if the reload chose one.

@@ -25,7 +25,7 @@
 //! rescore benchmark's sample of 100 candidates × 1024 dimensions, the largest
 //! cosine error against an f64 sum was 1.49e-8 for the AVX2 kernel against
 //! 7.75e-8 for the sequential loop, and 1.43e-8 for NEON against 1.18e-8 for
-//! Accelerate on an M4 (PaminMemory, `benchmarks/results/inference/rescore-simd-2026-10-12`).
+//! Accelerate on an M4 (pamin-memory, `benchmarks/results/inference/rescore-simd-2026-10-12`).
 //! The unit test holds every kernel within 1e-5 × √n of an f64 sum.
 
 pub mod f16;

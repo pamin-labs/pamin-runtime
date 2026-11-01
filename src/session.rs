@@ -25,7 +25,7 @@ use crate::{Error, Result};
 /// An ONNX Runtime session over `model`, built the way `fastembed` 6.1 builds
 /// one.
 ///
-/// PaminMemory's models were loaded by `fastembed` until they needed a
+/// pamin-memory's models were loaded by `fastembed` until they needed a
 /// tokenizer it would not let them share, and what its builder chose decides
 /// the scores: the execution providers in order, ONNX Runtime's layout
 /// optimizations, and [`threads`](crate::budget::threads) or one per core. So

@@ -10,7 +10,7 @@
 //!
 //! They are dropped only after a model has gone `IDLE` without a pass, not
 //! after every search: releasing after every search cost latency (see
-//! PaminMemory's `docs/measured.md`), and latency outranks memory.
+//! pamin-memory's `docs/measured.md`), and latency outranks memory.
 
 use std::path::Path;
 #[cfg(any(target_os = "linux", test))]
