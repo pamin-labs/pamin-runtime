@@ -1,0 +1,20 @@
+# What the crate graph is allowed to carry. Enforced by `cargo deny check` in
+# CI; run it locally the same way after `cargo install cargo-deny`.
+
+[licenses]
+# Every licence in the graph today, listed rather than globbed, so adding a
+# dependency with a new one is a decision somebody makes instead of a thing
+# that happens.
+allow = [
+    "Apache-2.0",
+    # `webpki-root-certs`: the CA bundle ONNX Runtime's build-time download
+    # is fetched against.
+    "CDLA-Permissive-2.0",
+    # `hmac-sha256`: what checks that download.
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+]
+
+[bans]
+multiple-versions = "allow"
