@@ -15,11 +15,14 @@ exclude = ["/.agents", "/.claude", "/.github", "/.pamin-labs-dev.toml", "/AGENTS
 # Widens fp16 codes with the CPU's own conversion instruction (F16C on x86-64,
 # fp16 on aarch64), detected at run time.
 half = "=2.7.1"
-# Model paths and provider counts in log lines, quoted as JSON.
+# A measured plan on disk, and model paths and provider counts in log lines.
+serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 # Content digests: a prepared copy's source, and the Windows ML catalog.
 sha2 = "=0.10.9"
 thiserror = "=2.0.20"
+# Names a plan file's writer, and tells an abandoned write from a live one.
+uuid = { version = "=1.26.0", features = ["v7"] }
 tracing = "=0.1.44"
 # The inference runtime. Pinned exactly because it is a release candidate.
 # `std` is what loading a session from a file needs; `download-binaries`

@@ -10,6 +10,8 @@
 //!   while it is idle.
 //! - [`session`]: sessions over a model's file, and the Core ML compiled
 //!   cache for static shapes.
+//! - [`plan`]: which device a model runs on, chosen by measuring it and
+//!   kept per machine.
 //! - [`prepared`]: what keys a prepared, memory-mapped copy of a model to the
 //!   runtime and CPU that wrote it.
 //!
@@ -21,6 +23,7 @@ pub mod device;
 mod error;
 pub mod kernels;
 mod onnx;
+pub mod plan;
 pub mod prepared;
 pub mod resident;
 pub mod session;

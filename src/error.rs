@@ -11,6 +11,9 @@ pub enum Error {
     /// needs, does not load, or it finds no device.
     #[error("{0}")]
     Incompatible(String),
+    /// A provider whose outputs do not match the CPU's reference outputs.
+    #[error("{0}")]
+    Numerical(String),
     /// Anything else ONNX Runtime refused.
     #[error("{0}")]
     Runtime(String),
