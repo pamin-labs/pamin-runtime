@@ -4,11 +4,17 @@
 //! loaded from a file goes through [`session`] or [`cpu_session`], so the
 //! clean mappings it created are counted as its own (see
 //! [`crate::resident::loading`]) and the providers it was actually assigned
-//! are logged.
+//! are logged. [`SharedCpuSession`] is the one session several threads may
+//! run at once.
 
 use std::path::{Path, PathBuf};
 
-use ort::session::{Session, builder::SessionBuilder};
+use std::borrow::Cow;
+use std::ffi::CString;
+use std::ptr::NonNull;
+
+use ort::session::{Session, SessionInputValue, SessionOutputs, builder::SessionBuilder};
+use ort::value::DynValue;
 
 use crate::budget::options;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -255,6 +261,129 @@ pub fn cpu_session(model: &Path, threads: usize) -> Result<(Session, Vec<(usize,
     let (session, mapped) = commit_owning(&mut builder, model)?;
     report_model(&session, model);
     Ok((session, mapped))
+}
+
+/// A pass's outputs, owned: by name, in the order the graph lists them.
+pub type Outputs = Vec<(String, DynValue)>;
+
+fn failed(error: &dyn std::fmt::Display) -> Error {
+    Error::Runtime(format!("running the model: {error}"))
+}
+
+/// The one session [`run_shared`] runs from several threads at once: loaded
+/// on ONNX Runtime's CPU execution provider alone, with every node of the
+/// graph assigned to it.
+///
+/// Concurrent `Run` is safe on some execution providers and not on others,
+/// so this type is the only way onto the concurrent path, and it admits the
+/// CPU alone. ONNX Runtime documents `Run` as callable from several threads
+/// on one session (`InferenceSession::Run` in
+/// `onnxruntime/core/session/inference_session.h`), and an execution provider
+/// that cannot take that says so through `ConcurrentRunSupported`, for which
+/// ONNX Runtime then serializes `Run` itself (XNNPACK, WebGPU, WebNN, JS in
+/// 1.28). DirectML does not declare it and documents that only one thread may
+/// call `Run` at a time; CUDA and TensorRT have concurrency reports against
+/// them. None of those may reach this type: [`load`](Self::load) builds the
+/// session from the CPU provider alone and refuses it unless ONNX Runtime
+/// assigned every node to that provider.
+pub struct SharedCpuSession(Session);
+
+impl SharedCpuSession {
+    /// The session, and the clean mappings of `model`'s directory it
+    /// created; see [`crate::resident::loading`].
+    pub fn load(model: &Path) -> Result<(Self, Vec<(usize, usize)>)> {
+        let (session, mapped) = cpu_session(model, 1)?;
+        cpu_alone(&assigned_providers(&session)?)?;
+        Ok((Self(session), mapped))
+    }
+}
+
+/// Whether `assigned`, a session's node count by execution provider, puts
+/// every node on the CPU provider. An empty assignment is refused too: it
+/// means ONNX Runtime recorded none, not that there was nothing to assign.
+fn cpu_alone(assigned: &std::collections::BTreeMap<String, usize>) -> Result<()> {
+    if assigned.is_empty() {
+        return Err(failed(&"a shared session recorded no provider assignment"));
+    }
+    match assigned
+        .iter()
+        .find(|(provider, nodes)| *provider != "CPUExecutionProvider" && **nodes > 0)
+    {
+        Some((provider, _)) => Err(failed(&format!(
+            "a shared session assigned nodes to {provider}, not the CPU alone"
+        ))),
+        None => Ok(()),
+    }
+}
+
+/// One forward pass over `feed` on `session`, which other threads may be
+/// running at the same moment, as [`Session::run`] would make it.
+///
+/// `ort` runs a session only through `&mut`: its author does not trust ONNX
+/// Runtime's `Run` from several threads, naming "certain EP allocators or
+/// statistics trackers" in `ort`'s source, and recommends a session per
+/// thread. Here the session is a [`SharedCpuSession`] -- the CPU provider
+/// alone, its arena off, no profiling -- of one intra-op thread, so that every
+/// pass runs on the thread that asked for it. So this is `Run` itself, through
+/// ONNX Runtime's C API, called on a shared session -- the call the `ort`
+/// crate makes, without the exclusive borrow it puts in front of it.
+pub fn run_shared(
+    session: &SharedCpuSession,
+    feed: &[(Cow<'static, str>, SessionInputValue<'static>)],
+) -> Result<Outputs> {
+    use ort::AsPointer;
+    let session = &session.0;
+    let names = |names: &mut dyn Iterator<Item = &str>| -> Result<Vec<CString>> {
+        names
+            .map(|name| CString::new(name).map_err(|error| failed(&error)))
+            .collect()
+    };
+    let inputs = names(&mut feed.iter().map(|(name, _)| name.as_ref()))?;
+    let outputs = names(&mut session.outputs().iter().map(|output| output.name()))?;
+    let input_names: Vec<_> = inputs.iter().map(|name| name.as_ptr()).collect();
+    let output_names: Vec<_> = outputs.iter().map(|name| name.as_ptr()).collect();
+    let values: Vec<_> = feed.iter().map(|(_, value)| value.ptr()).collect();
+    let mut fetched = vec![std::ptr::null_mut(); outputs.len()];
+    // SAFETY: the session is live for the call, and ONNX Runtime allows `Run`
+    // on it from several threads at once on the CPU provider, the only one a
+    // `SharedCpuSession` admits (see above). Every name is a
+    // NUL-terminated string and every input a live value, all outliving the
+    // call; `fetched` has a slot for each output name, which `Run` fills.
+    let status = unsafe {
+        (ort::api().Run)(
+            session.ptr().cast_mut(),
+            std::ptr::null(),
+            input_names.as_ptr(),
+            values.as_ptr(),
+            values.len(),
+            output_names.as_ptr(),
+            output_names.len(),
+            fetched.as_mut_ptr(),
+        )
+    };
+    // SAFETY: the status comes straight from ONNX Runtime and is read once.
+    unsafe { ort::Error::result_from_status(status) }.map_err(|error| failed(&error))?;
+    let owner = session.inner();
+    outputs
+        .into_iter()
+        .zip(fetched)
+        .map(|(name, value)| {
+            let value = NonNull::new(value).ok_or_else(|| failed(&"an output came back empty"))?;
+            // SAFETY: `Run` succeeded, so `value` is an output it allocated
+            // and this pass now owns; `owner` keeps the session alive for as
+            // long as the value is.
+            let value = unsafe { DynValue::from_ptr(value, Some(std::sync::Arc::clone(&owner))) };
+            Ok((name.to_string_lossy().into_owned(), value))
+        })
+        .collect()
+}
+
+/// `outputs` as [`run_shared`] returns them.
+pub fn owned(outputs: SessionOutputs<'_>) -> Outputs {
+    outputs
+        .into_iter()
+        .map(|(name, value)| (name.to_owned(), value))
+        .collect()
 }
 
 #[cfg(test)]
@@ -723,5 +852,40 @@ mod tests {
             assigned_providers(&unrecorded).is_err(),
             "assignment inspection worked without enabling its collection premise"
         );
+    }
+
+    /// Only a session whose every node is on the CPU provider may be run from
+    /// several threads at once.
+    #[test]
+    fn only_the_cpu_alone_reaches_the_shared_session() {
+        let assigned = |entries: &[(&str, usize)]| {
+            entries
+                .iter()
+                .map(|(provider, nodes)| (provider.to_string(), *nodes))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        };
+        assert!(cpu_alone(&assigned(&[("CPUExecutionProvider", 900)])).is_ok());
+        assert!(cpu_alone(&assigned(&[])).is_err(), "nothing recorded");
+        for other in [
+            "DmlExecutionProvider",
+            "CUDAExecutionProvider",
+            "CoreMLExecutionProvider",
+            "TensorrtExecutionProvider",
+            "XnnpackExecutionProvider",
+        ] {
+            assert!(
+                cpu_alone(&assigned(&[("CPUExecutionProvider", 10), (other, 1)])).is_err(),
+                "{other} reached the shared session"
+            );
+        }
+    }
+
+    /// A real graph loaded for sharing records its nodes on the CPU provider,
+    /// so the guard above admits it rather than refusing every model.
+    #[test]
+    fn a_cpu_graph_loads_as_a_shared_session() {
+        let model = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/coreml-normalization.onnx");
+        SharedCpuSession::load(&model).expect("a CPU graph is admitted");
     }
 }
