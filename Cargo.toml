@@ -1,7 +1,7 @@
 [package]
 name = "pamin-runtime"
 description = "Compute for Pamin modules that run models locally: instruction-set kernels, ONNX Runtime devices, thread budgets and prepared-model keys."
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.98.1"
 license = "Apache-2.0"
@@ -58,6 +58,8 @@ libc = "0.2.189"
 
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["coreml"] }
+# `sysctlbyname`, for the macOS build that names Core ML's compile cache.
+libc = "0.2.189"
 
 # sha2 0.10 enables its ARM SHA instructions only with this feature. Its
 # backend checks CPU support and retains the software fallback. Keep the

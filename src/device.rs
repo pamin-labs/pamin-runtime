@@ -144,9 +144,80 @@ pub fn assigned_providers(session: &Session) -> Result<std::collections::BTreeMa
 /// transformer graphs. ALL permits the framework's CPU/GPU/ANE combination.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub fn coreml() -> ort::ep::CoreML {
+    static PRUNED: std::sync::Once = std::sync::Once::new();
+    PRUNED.call_once(prune_coreml_compiles);
     ort::ep::CoreML::default()
         .with_model_format(ort::ep::coreml::ModelFormat::MLProgram)
         .with_compute_units(ort::ep::coreml::ComputeUnits::All)
+}
+
+/// Core ML compiles every model it loads into
+/// `~/Library/Caches/<executable>/com.apple.e5rt.e5bundlecache/<macOS build>/`,
+/// keyed by the model's path, and never removes an entry; neither Core ML nor
+/// ONNX Runtime lets a caller move or bound it. A macOS update leaves every
+/// earlier build's entries (up to a gigabyte per model and shape) unused, so
+/// they go before this process's first Core ML compile. A bundled executable
+/// caches under its bundle identifier instead; that is not found and stays.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn prune_coreml_compiles() {
+    let (Some(home), Ok(executable), Some(build)) =
+        (std::env::home_dir(), std::env::current_exe(), os_build())
+    else {
+        return;
+    };
+    let Some(name) = executable.file_name() else {
+        return;
+    };
+    let root = home
+        .join("Library/Caches")
+        .join(name)
+        .join("com.apple.e5rt.e5bundlecache");
+    prune_builds(&root, &build);
+}
+
+/// Removes every build directory under `root` but `current`'s.
+#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), test))]
+fn prune_builds(root: &Path, current: &str) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name() == current || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        match std::fs::remove_dir_all(entry.path()) {
+            Ok(()) => {
+                tracing::info!(build = ?entry.file_name(), "removed an earlier macOS build's Core ML compiles")
+            }
+            Err(error) => {
+                tracing::warn!(%error, build = ?entry.file_name(), "could not remove an earlier macOS build's Core ML compiles")
+            }
+        }
+    }
+}
+
+/// The running macOS build, such as `26A434`: the name Core ML gives its
+/// compile cache's directory.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn os_build() -> Option<String> {
+    let mut buffer = [0u8; 64];
+    let mut length = buffer.len();
+    // SAFETY: the name is NUL-terminated and `length` is `buffer`'s size; the
+    // kernel writes at most that many bytes and stores the count in `length`.
+    let status = unsafe {
+        libc::sysctlbyname(
+            c"kern.osversion".as_ptr(),
+            buffer.as_mut_ptr().cast(),
+            &mut length,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if status != 0 {
+        return None;
+    }
+    let build = std::ffi::CStr::from_bytes_until_nul(&buffer[..length]).ok()?;
+    Some(build.to_str().ok()?.to_owned()).filter(|build| !build.is_empty())
 }
 
 /// The accelerators to try before the CPU, best first.
@@ -563,6 +634,34 @@ fn cuda_inventory(bytes: &[u8]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prune_builds_keeps_only_the_current_build() {
+        let root = tempfile::tempdir().unwrap();
+        for build in ["25C56", "26A434"] {
+            std::fs::create_dir_all(root.path().join(build).join("entry")).unwrap();
+        }
+        std::fs::write(root.path().join("note"), b"").unwrap();
+        prune_builds(root.path(), "26A434");
+        let mut left: Vec<_> = std::fs::read_dir(root.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["26A434", "note"]);
+        prune_builds(&root.path().join("missing"), "26A434");
+    }
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn os_build_matches_sysctl() {
+        let output = std::process::Command::new("sysctl")
+            .args(["-n", "kern.osversion"])
+            .output()
+            .unwrap();
+        let expected = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(os_build().as_deref(), Some(expected.trim()));
+    }
 
     /// CUDA is a candidate only where there is an NVIDIA driver or GPU: a
     /// device node, natively or through WSL 2, the loaded kernel module, or an
