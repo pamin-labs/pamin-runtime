@@ -42,6 +42,25 @@ The bar is high performance, low resource use, fast builds, and clean, DRY, deco
 - Nothing here knows about MCP, HTTP, tenants or any module; it changes only when hardware or inference back ends change.
 - Every kernel path is tested on its own hardware (x86-64, Linux aarch64, Apple silicon); AVX-512 stays out until a measurement beats AVX2.
 
+## Layout
+
+The crate is one project in one language, so this file holds all its rules. **A directory says what its code is:** this list names every module and folder by its path, with what it owns, and a new one is described here in the PR that adds it, never placed beside them without a line; no test reads this list yet, so review checks it.
+
+- `src/lib.rs`: the crate's documentation, its modules and its public re-exports.
+- `src/error.rs`: the crate's one error type and `Result`.
+- `src/kernels.rs`: vector math dispatched by instruction set at run time (the exact-rescoring dot product); `src/kernels/f16.rs`: IEEE 754 half-precision encoding and decoding.
+- `src/onnx.rs`: small ONNX wire helpers the graph rewrites share, leaving unknown fields unchanged.
+- `src/activity.rs`: what model loads in this process fetched and prepared, as counters.
+- `src/device.rs`: which ONNX Runtime execution providers a machine can run, and what a session was actually given.
+- `src/winml.rs`: Windows ML's certified vendor catalog, on Windows only.
+- `src/budget.rs`: how much of the machine one forward pass may use, and the session options every model is built with.
+- `src/session.rs`: ONNX Runtime sessions over a model's file, and the Core ML compiled cache for static shapes.
+- `src/resident.rs`: handing a model's mapped weights back to the page cache while it is idle.
+- `src/plan.rs`: which device a model runs on, chosen by measuring it and kept per machine.
+- `src/prepared/`: a prepared, memory-mapped copy of a model: `mod.rs` builds and loads it, `key.rs` keys it to the runtime and CPU that wrote it, and `attention.rs`, `word_embeddings.rs` and `native.rs` are its graph rewrites.
+- `build.rs`: carries the Windows ML catalog with an installed executable.
+- `tests/`: integration tests through the public API, with ONNX fixtures in `tests/fixtures/`.
+
 ## Rust
 
 These rules are the same in every Pamin Labs Rust repository; change them in all of them together.
