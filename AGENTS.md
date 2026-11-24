@@ -14,6 +14,8 @@ You must follow `.agents/skills/pamin-engineering/references/core.md`: @.agents/
 You must follow `.agents/skills/pamin-engineering/references/rust.md`: @.agents/skills/pamin-engineering/references/rust.md
 You must follow `.agents/skills/pamin-engineering/references/performance.md`: @.agents/skills/pamin-engineering/references/performance.md
 
+`data.md` (storage, queries, migrations) is not imported: the crate stores no data: the prepared-model cache is in memory and bounded, and models are read from paths the caller passes.
+
 - This crate is a library, so `core.md`'s rule for published libraries applies; it pins `ort` exactly, for the reason in InternalDocs `pamin-platform/decisions/2026-11-01-library-dependency-requirements.md`.
 - **No hidden defaults.** The crate deploys nothing, so it reads few settings; each environment variable it reads and each default it falls back to (a device selection, a thread budget, a cache directory) is named once, as a constant in the module that owns it, and documented there.
 - External JSON here is the plan cache's files and model metadata; `core.md`'s "Model external data with types" binds them.
